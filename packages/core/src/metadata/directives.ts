@@ -783,12 +783,35 @@ export interface PipeDecorator {
  * @stable
  */
 export interface Pipe {
+  /**
+   * Name of the pipe.
+   *
+   * The pipe name is used in template bindings. For example if a pipe is named
+   * `myPipe` then it would be used in the template binding expression like
+   * so:  `{{ exp | myPipe }}`.
+   */
   name: string;
+
+  /**
+   * If Pipe is pure (its output depends only on its input.)
+   *
+   * Normally pipe's `transform` method is only invoked when the inputs to pipe`s
+   * `transform` method change. If the pipe has internal state (it's result are
+   * dependant on state other than its arguments) than set `pure` to `false` so
+   * that the pipe is invoked on each change-detection even if the arguments to the
+   * pipe do not change.
+   */
   pure?: boolean;
 }
 
 /**
  * Pipe decorator and metadata.
+ *
+ * Use the `@Pipe` annotation to declare that a given class is a pipe. A pipe
+ * class must also implement {@link PipeTransform} interface.
+ *
+ * To use the pipe include a reference to the pipe class in
+ * {@link NgModule#declarations}.
  *
  * @stable
  * @Annotation

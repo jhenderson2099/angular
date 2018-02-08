@@ -7,11 +7,12 @@
  */
 
 import {ViewEncapsulation} from '../../src/core';
-import {D, E, T, b, defineComponent, e, markDirty, t} from '../../src/render3/index';
-import {createRendererType2} from '../../src/view';
+import {defineComponent, markDirty} from '../../src/render3/index';
+import {bind, componentRefresh, container, containerRefreshEnd, containerRefreshStart, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, text, textBinding} from '../../src/render3/instructions';
+import {createRendererType2} from '../../src/view/index';
 
 import {getRendererFactory2} from './imported_renderer2';
-import {containerEl, renderComponent, requestAnimationFrame} from './render_util';
+import {containerEl, renderComponent, renderToHtml, requestAnimationFrame, toHtml} from './render_util';
 
 describe('component', () => {
   class CounterComponent {
@@ -24,9 +25,9 @@ describe('component', () => {
       tag: 'counter',
       template: function(ctx: CounterComponent, cm: boolean) {
         if (cm) {
-          T(0);
+          text(0);
         }
-        t(0, b(ctx.count));
+        textBinding(0, bind(ctx.count));
       },
       factory: () => new CounterComponent,
       inputs: {count: 'count'},
@@ -37,24 +38,88 @@ describe('component', () => {
   describe('renderComponent', () => {
     it('should render on initial call', () => {
       renderComponent(CounterComponent);
-      expect(containerEl.innerHTML).toEqual('0');
+      expect(toHtml(containerEl)).toEqual('0');
     });
 
     it('should re-render on input change or method invocation', () => {
       const component = renderComponent(CounterComponent);
-      expect(containerEl.innerHTML).toEqual('0');
+      expect(toHtml(containerEl)).toEqual('0');
       component.count = 123;
       markDirty(component, requestAnimationFrame);
-      expect(containerEl.innerHTML).toEqual('0');
+      expect(toHtml(containerEl)).toEqual('0');
       requestAnimationFrame.flush();
-      expect(containerEl.innerHTML).toEqual('123');
+      expect(toHtml(containerEl)).toEqual('123');
       component.increment();
       markDirty(component, requestAnimationFrame);
-      expect(containerEl.innerHTML).toEqual('123');
+      expect(toHtml(containerEl)).toEqual('123');
       requestAnimationFrame.flush();
-      expect(containerEl.innerHTML).toEqual('124');
+      expect(toHtml(containerEl)).toEqual('124');
     });
 
+  });
+
+});
+
+describe('component with a container', () => {
+
+  function showItems(ctx: {items: string[]}, cm: boolean) {
+    if (cm) {
+      container(0);
+    }
+    containerRefreshStart(0);
+    {
+      for (const item of ctx.items) {
+        const cm0 = embeddedViewStart(0);
+        {
+          if (cm0) {
+            text(0);
+          }
+          textBinding(0, bind(item));
+        }
+        embeddedViewEnd();
+      }
+    }
+    containerRefreshEnd();
+  }
+
+  class WrapperComponent {
+    items: string[];
+    static ngComponentDef = defineComponent({
+      type: WrapperComponent,
+      tag: 'wrapper',
+      template: function ChildComponentTemplate(ctx: {items: string[]}, cm: boolean) {
+        if (cm) {
+          container(0);
+        }
+        containerRefreshStart(0);
+        {
+          const cm0 = embeddedViewStart(0);
+          { showItems({items: ctx.items}, cm0); }
+          embeddedViewEnd();
+        }
+        containerRefreshEnd();
+      },
+      factory: () => new WrapperComponent,
+      inputs: {items: 'items'}
+    });
+  }
+
+  function template(ctx: {items: string[]}, cm: boolean) {
+    if (cm) {
+      elementStart(0, WrapperComponent);
+      elementEnd();
+    }
+    elementProperty(0, 'items', bind(ctx.items));
+    WrapperComponent.ngComponentDef.h(1, 0);
+    componentRefresh(1, 0);
+  }
+
+  it('should re-render on input change', () => {
+    const ctx: {items: string[]} = {items: ['a']};
+    expect(renderToHtml(template, ctx)).toEqual('<wrapper>a</wrapper>');
+
+    ctx.items = [...ctx.items, 'b'];
+    expect(renderToHtml(template, ctx)).toEqual('<wrapper>ab</wrapper>');
   });
 
 });
@@ -68,12 +133,11 @@ describe('encapsulation', () => {
       tag: 'wrapper',
       template: function(ctx: WrapperComponent, cm: boolean) {
         if (cm) {
-          E(0, EncapsulatedComponent.ngComponentDef);
-          { D(1, EncapsulatedComponent.ngComponentDef.n(), EncapsulatedComponent.ngComponentDef); }
-          e();
+          elementStart(0, EncapsulatedComponent);
+          elementEnd();
         }
         EncapsulatedComponent.ngComponentDef.h(1, 0);
-        EncapsulatedComponent.ngComponentDef.r(1, 0);
+        componentRefresh(1, 0);
       },
       factory: () => new WrapperComponent,
     });
@@ -85,13 +149,12 @@ describe('encapsulation', () => {
       tag: 'encapsulated',
       template: function(ctx: EncapsulatedComponent, cm: boolean) {
         if (cm) {
-          T(0, 'foo');
-          E(1, LeafComponent.ngComponentDef);
-          { D(2, LeafComponent.ngComponentDef.n(), LeafComponent.ngComponentDef); }
-          e();
+          text(0, 'foo');
+          elementStart(1, LeafComponent);
+          elementEnd();
         }
         LeafComponent.ngComponentDef.h(2, 1);
-        LeafComponent.ngComponentDef.r(2, 1);
+        componentRefresh(2, 1);
       },
       factory: () => new EncapsulatedComponent,
       rendererType:
@@ -105,9 +168,9 @@ describe('encapsulation', () => {
       tag: 'leaf',
       template: function(ctx: LeafComponent, cm: boolean) {
         if (cm) {
-          E(0, 'span');
-          { T(1, 'bar'); }
-          e();
+          elementStart(0, 'span');
+          { text(1, 'bar'); }
+          elementEnd();
         }
       },
       factory: () => new LeafComponent,
@@ -117,30 +180,29 @@ describe('encapsulation', () => {
   it('should encapsulate children, but not host nor grand children', () => {
     renderComponent(WrapperComponent, getRendererFactory2(document));
     expect(containerEl.outerHTML)
-        .toEqual(
-            '<div host=""><encapsulated _nghost-c0="">foo<leaf _ngcontent-c0=""><span>bar</span></leaf></encapsulated></div>');
+        .toMatch(
+            /<div host=""><encapsulated _nghost-c(\d+)="">foo<leaf _ngcontent-c\1=""><span>bar<\/span><\/leaf><\/encapsulated><\/div>/);
   });
 
   it('should encapsulate host', () => {
     renderComponent(EncapsulatedComponent, getRendererFactory2(document));
     expect(containerEl.outerHTML)
-        .toEqual(
-            '<div host="" _nghost-c0="">foo<leaf _ngcontent-c0=""><span>bar</span></leaf></div>');
+        .toMatch(
+            /<div host="" _nghost-c(\d+)="">foo<leaf _ngcontent-c\1=""><span>bar<\/span><\/leaf><\/div>/);
   });
 
   it('should encapsulate host and children with different attributes', () => {
     class WrapperComponentWith {
       static ngComponentDef = defineComponent({
-        type: WrapperComponent,
+        type: WrapperComponentWith,
         tag: 'wrapper',
         template: function(ctx: WrapperComponentWith, cm: boolean) {
           if (cm) {
-            E(0, LeafComponentwith.ngComponentDef);
-            { D(1, LeafComponentwith.ngComponentDef.n(), LeafComponentwith.ngComponentDef); }
-            e();
+            elementStart(0, LeafComponentwith);
+            elementEnd();
           }
           LeafComponentwith.ngComponentDef.h(1, 0);
-          LeafComponentwith.ngComponentDef.r(1, 0);
+          componentRefresh(1, 0);
         },
         factory: () => new WrapperComponentWith,
         rendererType:
@@ -154,9 +216,9 @@ describe('encapsulation', () => {
         tag: 'leaf',
         template: function(ctx: LeafComponentwith, cm: boolean) {
           if (cm) {
-            E(0, 'span');
-            { T(1, 'bar'); }
-            e();
+            elementStart(0, 'span');
+            { text(1, 'bar'); }
+            elementEnd();
           }
         },
         factory: () => new LeafComponentwith,
@@ -167,7 +229,7 @@ describe('encapsulation', () => {
 
     renderComponent(WrapperComponentWith, getRendererFactory2(document));
     expect(containerEl.outerHTML)
-        .toEqual(
-            '<div host="" _nghost-c2=""><leaf _ngcontent-c2="" _nghost-c3=""><span _ngcontent-c3="">bar</span></leaf></div>');
+        .toMatch(
+            /<div host="" _nghost-c(\d+)=""><leaf _ngcontent-c\1="" _nghost-c(\d+)=""><span _ngcontent-c\2="">bar<\/span><\/leaf><\/div>/);
   });
 });
